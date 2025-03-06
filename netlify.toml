@@ -1,0 +1,7 @@
+[build]
+  functions = "api"  # 서버리스 함수 경로
+
+[[redirects]]
+  from = "/(.*)"
+  to = "/api/main.js"  # 서버리스 함수 파일 경로
+  status = 200
