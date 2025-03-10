@@ -3,14 +3,14 @@ import { AppController } from './app.controller';
 import { ScheduleModule } from '@nestjs/schedule';
 import { EventEmitterModule } from '@nestjs/event-emitter';
 import { CommandModule } from 'nestjs-command';
-import { IncentiveModule } from './modules/incentive.module';
+import { TweetCrawlerModule } from './tweet-crawler/module';
 
 @Module({
   imports: [
     ScheduleModule.forRoot(),
     EventEmitterModule.forRoot(),
     CommandModule,
-    IncentiveModule,
+    TweetCrawlerModule,
   ],
   controllers: [AppController],
   providers: [],

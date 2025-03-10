@@ -21,7 +21,7 @@ Guidelines:
 
 2. **"negative"**: 
    - If the tweet expresses **frustration**, **complaints**, **criticism**, or **negative sentiment**, the intent is "negative".
-   - If the tweet **casts doubt** on my project, **questions its legitimacy**, or uses words like "rug", "scam", or expresses **frustration** about my project or its activities.
+   - If the tweet **casts doubt** on my project, **questions its legitimacy**, or uses words like "rug", "scam", "fraud", "fake", "phishing", "illegal", or expresses **frustration** about my project or its activities.
    - **Questions that imply doubt or frustration about the project**, even if they are in the form of a question, should be classified as "negative". 
    - If the tweet makes people **question the legitimacy** of my project or doubts its future success.
    - **Important**: If a tweet expresses any form of **doubt, frustration, or criticism** about the project, even in the form of a question, it should be classified as **negative**. **Do not classify negative comments as positive** under any circumstances.

@@ -30,6 +30,9 @@ export class TwitterModel {
 
   @Prop({ type: String })
   type: 'influencer' | 'mention';
+
+  @Prop({ type: String })
+  intent: 'positive' | 'negative' | 'neutral' | 'question';
 }
 
 export type TwitterDocument = TwitterModel & Document;

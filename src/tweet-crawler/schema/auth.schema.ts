@@ -15,6 +15,9 @@ export class AuthModel {
 
   @Prop({ type: String, required: true })
   refresh_token: string;
+
+  @Prop({ type: Date, required: true })
+  updatedAt: Date;
 }
 
 export type AuthDocument = AuthModel & Document;

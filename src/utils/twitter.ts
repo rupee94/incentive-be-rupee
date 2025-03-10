@@ -1,19 +1,14 @@
 import axios from 'axios';
-import {
-  X_AUTHORIZATION_BASIC,
-  X_USER_ID,
-  TWITTER_API_KEY,
-} from '../config/environments';
-import { Tweet, TweetsResponse } from '../modules/dto/twitter.dto';
+import { TWITTER_API_KEY } from '../config/environments';
+import { Tweet, TweetsResponse } from '../tweet-crawler/dto/twitter.dto';
 
 export async function getTweetsByQuery(
   query: string,
   lastTweetId?: string,
-  cursor?: string,
 ): Promise<TweetsResponse> {
   let allTweets: Tweet[] = [];
   let hasNextPage = true;
-  let currentCursor = cursor;
+  let currentCursor = null;
 
   while (hasNextPage) {
     try {
@@ -27,7 +22,6 @@ export async function getTweetsByQuery(
           },
           params: {
             query,
-            queryType: 'Top',
             cursor: currentCursor,
           },
         },
@@ -55,58 +49,15 @@ export async function getTweetsByQuery(
         current_tweet_userName: filteredTweets[0].author.userName,
       });
     } catch (e) {
-      console.log(e);
-      console.log('getTweetsByQuery error');
-      break;
+      console.log('getTweetsByQuery error', e);
+
+      return {
+        tweets: allTweets,
+        has_next_page: false,
+        next_cursor: null,
+      };
     }
   }
 
   return { tweets: allTweets, has_next_page: false, next_cursor: null };
-}
-
-export async function postRetweet(tweetId: string, access_token: string) {
-  try {
-    const response = await axios.post(
-      `https://api.x.com/2/users/${X_USER_ID}/retweets`,
-      {
-        tweet_id: tweetId,
-      },
-      {
-        headers: {
-          Authorization: `Bearer ${access_token}`,
-          'Content-Type': 'application/json',
-        },
-      },
-    );
-
-    console.log(response.data);
-    return { status: 200, ...response.data };
-  } catch (err) {
-    console.error('postRetweet error', err.response.data);
-    return err.response.data;
-  }
-}
-
-export async function refreshToken(refresh_token: string) {
-  try {
-    const response = await axios.post(
-      'https://api.x.com/2/oauth2/token',
-      new URLSearchParams({
-        refresh_token: refresh_token,
-        grant_type: 'refresh_token',
-      }),
-      {
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-          Authorization: `Basic ${X_AUTHORIZATION_BASIC}`,
-        },
-      },
-    );
-
-    console.log(response.data);
-    return response.data;
-  } catch (err) {
-    console.error('refreshToken error', err.response.data);
-    throw err;
-  }
 }

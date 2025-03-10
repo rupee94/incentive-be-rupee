@@ -6,11 +6,8 @@ import { TWITTER_API_KEY } from '../../config/environments';
 import { TweetResults, TweetsResponse } from '../dto/twitter.dto';
 import { TwitterRepository } from '../repository/twitter.repository';
 import { TwitterModel } from '../schema/twitter.schema';
-import {
-  getTweetsByQuery,
-  postRetweet,
-  refreshToken,
-} from '../../utils/twitter';
+import { getTweetsByQuery } from '../../utils/twitter';
+import { postRetweet, postTweet, refreshToken } from '../../utils/x';
 import {
   findRelatedMediumArticles,
   IntentDetect,
@@ -23,6 +20,7 @@ import { createObjectCsvWriter } from 'csv-writer';
 import fs from 'fs';
 import csvParser from 'csv-parser';
 import { AuthRepository } from '../repository/auth.repository';
+
 @Injectable()
 export class TwitterService {
   constructor(
@@ -135,30 +133,40 @@ export class TwitterService {
     return await getTweetsByQuery(query, 'mention');
   }
 
-  // @Cron(CronExpression.EVERY_6_HOURS)
+  @Cron(CronExpression.EVERY_DAY_AT_MIDNIGHT)
   async crawlTweetsByCrossMention(): Promise<TweetResults> {
     const latestTweet = await this.twitterRepository.findLatest('mention');
-    let query = `($CROSS OR (@cross_protocol) OR (#xCROSS)) -filter:replies (lang:en OR lang:ko)`;
+    let query = `($CROSS OR (@cross_protocol)) -filter:replies -filter:retweets filter:blue_verified (lang:en OR lang:ko)`;
     let since_id;
     if (latestTweet) {
       since_id = latestTweet.tweetId;
       query += ` since_id:${since_id}`;
     }
 
-    console.log('getTweetsByCrossMention이 실행중입니다.');
-
+    console.log('crawlTweetsByCrossMention이 실행중입니다.');
     console.log('query', query);
     const data = await getTweetsByQuery(query);
 
     if (data.tweets.length === 0) {
-      console.log('getTweetsByCrossMention이 종료되었습니다.');
+      console.log('crawlTweetsByCrossMention이 종료되었습니다.');
       return;
     }
 
-    // TODO intent에 따른 work flow 구현
+    const results: TwitterModel[] = [];
+    for (const tweet of data.tweets) {
+      const intent = await IntentDetectWithConfidence(tweet.text, [
+        'positive',
+        'negative',
+        'question',
+        'neutral',
+      ]);
 
-    const results: TwitterModel[] = data.tweets.map((tweet) => {
-      return {
+      // Determine the highest confidence intent
+      const estimatedIntent = Object.keys(intent).reduce((a, b) =>
+        intent[a] > intent[b] ? a : b,
+      );
+
+      results.push({
         tweetId: tweet.id,
         userName: tweet.author.userName,
         text: tweet.text,
@@ -166,12 +174,17 @@ export class TwitterService {
         type: 'mention',
         tweetCreatedAt: new Date(tweet.createdAt),
         recommendedText: '',
-      };
-    });
+        intent: estimatedIntent as
+          | 'positive'
+          | 'neutral'
+          | 'question'
+          | 'negative',
+      });
+    }
 
     await this.twitterRepository.insertMany(results);
 
-    console.log('getTweetsByCrossMention이 종료되었습니다.');
+    console.log('crawlTweetsByCrossMention이 종료되었습니다.');
     console.log('results length', results.length);
 
     return { tweets: results };
@@ -181,7 +194,7 @@ export class TwitterService {
   async crawlTweetsByInfluencer() {
     const influencerList = INFLUENCER_LIST;
 
-    console.log('getTweetsByInfluencer이 실행중입니다.');
+    console.log('crawlTweetsByInfluencer이 실행중입니다.');
 
     const latestTweets = await Promise.all(
       influencerList.map((influencer) =>
@@ -209,99 +222,42 @@ export class TwitterService {
     const allTweets = tweetResponses.flatMap((response) => response.tweets);
 
     if (allTweets.length === 0) {
-      console.log('getTweetsByInfluencer이 종료되었습니다.');
+      console.log('crawlTweetsByInfluencer이 종료되었습니다.');
       return;
     }
 
-    const results: TwitterModel[] = allTweets.map((tweet) => {
-      return {
-        tweetId: tweet.id,
-        userName: tweet.author.userName,
-        text: tweet.text,
-        url: tweet.url,
-        type: 'influencer',
-        tweetCreatedAt: new Date(tweet.createdAt),
-        recommendedText: '',
-      };
-    });
+    const results: TwitterModel[] = [];
+    for (const tweet of allTweets) {
+      const relatedArticle = await findRelatedMediumArticles(
+        tweet.text,
+        tweet.url,
+      );
+
+      if (relatedArticle) {
+        const retweetText = await RetweetText(tweet.text);
+        // const tone1 = await Tone1Fitting(retweetText);
+        // const tone2 = await Tone2Fitting(retweetText);
+        // console.log('tone1', tone1);
+        // console.log('tone2', tone2);
+
+        results.push({
+          tweetId: tweet.id,
+          userName: tweet.author.userName,
+          text: tweet.text,
+          url: tweet.url,
+          type: 'influencer',
+          tweetCreatedAt: new Date(tweet.createdAt),
+          recommendedText: retweetText,
+          intent: 'neutral',
+        });
+      }
+    }
 
     await this.twitterRepository.insertMany(results);
 
     console.log('getTweetsByInfluencer이 종료되었습니다.');
 
     return { tweets: results };
-  }
-
-  async autoRetweet() {
-    const tweets = await this.twitterRepository.findManyByType('mention');
-    const auth = (await this.authRepository.findAll())[0];
-    let access_token = auth.access_token;
-    let refresh_token = auth.refresh_token;
-
-    for (const tweet of tweets) {
-      const result = await postRetweet(
-        '1894469438982033558',
-        auth.access_token,
-      );
-
-      if (result.status === 401) {
-        const newToken = await refreshToken(refresh_token);
-        await this.authRepository.updateOne(
-          auth.access_token,
-          newToken.access_token,
-          newToken.refresh_token,
-        );
-
-        access_token = newToken.access_token;
-        refresh_token = newToken.refresh_token;
-      } else if (result.status === 429) {
-        console.log('429 error');
-      }
-
-      return result;
-    }
-  }
-
-  // TODO: 테스트용으로만 사용 추후 삭제할 예정
-  async refreshToken() {
-    const auth = (await this.authRepository.findAll())[0];
-    let newToken = auth;
-    try {
-      newToken = await refreshToken(newToken.refresh_token);
-
-      const maxRetries = 3;
-      let attempt = 0;
-      let success = false;
-
-      while (attempt < maxRetries && !success) {
-        try {
-          await this.authRepository.updateOne(
-            auth.access_token,
-            newToken.access_token,
-            newToken.refresh_token,
-          );
-
-          console.log('Token updated successfully');
-          success = true;
-        } catch (updateError) {
-          attempt++;
-          console.error(
-            `Failed to update token in database, attempt ${attempt}`,
-            updateError,
-          );
-
-          if (attempt < maxRetries) {
-            console.log('Retrying update...');
-          } else {
-            console.error('Max retries reached. Update failed.');
-          }
-        }
-      }
-    } catch (err) {
-      console.error('Failed to refresh token', err.response.data);
-    }
-
-    return newToken;
   }
 
   async getTweetsByInfluencer() {
@@ -324,7 +280,7 @@ export class TwitterService {
     return result;
   }
 
-  async test() {
+  async influencerRecommendTest() {
     const tweets = await this.twitterRepository.findQuery({
       type: 'influencer',
       tweetCreatedAt: {
@@ -366,7 +322,7 @@ export class TwitterService {
     console.log('test이 종료되었습니다.');
   }
 
-  async test2() {
+  async mentionTest() {
     // Read data from estimated_intent.csv
     const tweetTexts: { Tweet_Text: string; Human_Intent: string }[] = [];
     fs.createReadStream('./estimated_intent.csv')
@@ -381,24 +337,14 @@ export class TwitterService {
         console.log('CSV file successfully processed');
       });
 
-    const latestTweet = await this.twitterRepository.findLatest('mention');
+    const latestTweets = (
+      await this.twitterRepository.findQuery({
+        type: 'mention',
+      })
+    )
+      .sort((a, b) => Number(b.tweetId) - Number(a.tweetId))
+      .slice(0, 2);
     const auth = (await this.authRepository.findAll())[0];
-    // let query = `("$MET" OR "metya.com" OR (@metyacom) OR ("#Metya")) -filter:replies -from:metyacom (lang:en OR lang:ko) since:2025-02-01`;
-    // let since_id;
-    // if (latestTweet) {
-    //   since_id = latestTweet.tweetId;
-    //   query += ` since_id:${since_id}`;
-    // }
-
-    console.log('getTweetsByCrossMention이 실행중입니다.');
-
-    // console.log('query', query);
-    // const data = await getTweetsByQuery(query);
-
-    // if (data.tweets.length === 0) {
-    //   console.log('getTweetsByCrossMention이 종료되었습니다.');
-    //   return;
-    // }
 
     const csvWriter = createObjectCsvWriter({
       path: './estimated_intent_confidence.csv',
@@ -417,6 +363,8 @@ export class TwitterService {
     // Use tweetTexts array as needed
     console.log('Tweet_Texts from CSV:', tweetTexts.length);
 
+    let isPositiveExecuted = false;
+    let isQuestionExecuted = false;
     for (const tweet of tweetTexts) {
       const intent = await IntentDetectWithConfidence(tweet.Tweet_Text, [
         'positive',
@@ -431,11 +379,24 @@ export class TwitterService {
       );
 
       if (estimatedIntent == 'positive' || estimatedIntent == 'neutral') {
-        await postRetweet(latestTweet.tweetId, auth.access_token);
-        break;
+        if (!isPositiveExecuted) {
+          await postRetweet(latestTweets[0].tweetId, auth.access_token);
+          isPositiveExecuted = true;
+        }
       } else if (estimatedIntent == 'question') {
+        if (!isQuestionExecuted) {
+          await postTweet(
+            'If you have any questions, please ask through https://t.me/rupee94_bot.',
+            latestTweets[1].tweetId,
+            auth.access_token,
+          );
+          isQuestionExecuted = true;
+        }
       }
 
+      if (isPositiveExecuted && isQuestionExecuted) {
+        break;
+      }
       estimatedIntents.push({
         Tweet_Text: tweet.Tweet_Text,
         Estimated_Positive: intent.positive,

@@ -3,8 +3,8 @@ import { ApiOperation, ApiTags, ApiQuery } from '@nestjs/swagger';
 import { TwitterService } from '../service/twitter.service';
 
 // Note: will be deprecated soon and be replaced to open-api controller.
-@ApiTags('Twitter')
-@Controller(`v1/twitter`)
+@ApiTags('Tweet Crawler - 3rd Party')
+@Controller(`v1/twitterapi`)
 export class TwitterController {
   constructor(private readonly twitterService: TwitterService) {}
 
@@ -78,35 +78,18 @@ export class TwitterController {
   }
 
   @ApiOperation({
-    description: 'auto retweet',
+    description: 'influencer 추천 텍스트 조회',
   })
-  @Post('/auto_retweet')
-  async autoRetweet() {
-    return await this.twitterService.autoRetweet();
-  }
-
-  // TODO: 테스트용으로만 사용 추후 삭제할 예정
-  @ApiOperation({
-    description: 'refresh token',
-  })
-  @Post('/refresh_token')
-  async refreshToken() {
-    return await this.twitterService.refreshToken();
+  @Get('/influencer_recommend_test')
+  async influencerRecommendTest() {
+    return await this.twitterService.influencerRecommendTest();
   }
 
   @ApiOperation({
-    description: 'test',
+    description: 'mention 테스트',
   })
-  @Get('/test')
-  async test() {
-    return await this.twitterService.test();
-  }
-
-  @ApiOperation({
-    description: 'test2',
-  })
-  @Get('/test2')
-  async test2() {
-    return await this.twitterService.test2();
+  @Get('/mention_test')
+  async mentionTest() {
+    return await this.twitterService.mentionTest();
   }
 }
