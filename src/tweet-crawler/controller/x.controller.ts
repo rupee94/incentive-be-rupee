@@ -9,9 +9,17 @@ export class XController {
   constructor(private readonly xService: XService) {}
 
   @ApiOperation({
+    description: 'execute tweet crawler',
+  })
+  @Post('/execute_auto_mention')
+  async executeAutoMention() {
+    return await this.xService.executeAutoMention();
+  }
+
+  @ApiOperation({
     description: 'get tweets by query',
   })
-  @Post('/tweets_by_mention')
+  @Post('/crawl_tweets_by_mention')
   async crawlTweetsByCrossMention() {
     return await this.xService.crawlTweetsByCrossMention();
   }
@@ -19,7 +27,7 @@ export class XController {
   @ApiOperation({
     description: 'get tweets by influencer',
   })
-  @Post('/tweets_by_influencer')
+  @Post('/crawl_tweets_by_influencer')
   async crawlTweetsByInfluencer() {
     return await this.xService.crawlTweetsByInfluencer();
   }

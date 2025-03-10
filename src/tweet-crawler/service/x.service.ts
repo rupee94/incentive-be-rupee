@@ -8,17 +8,19 @@ import {
 } from '../../utils/x';
 import { AuthRepository } from '../repository/auth.repository';
 import { AuthModel } from '../schema/auth.schema';
-import { ExecuteMetaRepository } from '../repository/executeMeta.repository';
 import { INFLUENCER_LIST } from 'src/config/constants';
 import { TwitterModel } from '../schema/twitter.schema';
-import { findRelatedMediumArticles, RetweetText } from 'src/utils/openai';
+import {
+  findRelatedMediumArticles,
+  IntentDetectWithConfidence,
+  RetweetText,
+} from 'src/utils/openai';
 
 @Injectable()
 export class XService {
   constructor(
     private readonly twitterRepository: TwitterRepository,
     private readonly authRepository: AuthRepository,
-    private readonly executeMetaRepository: ExecuteMetaRepository,
   ) {}
 
   // @Cron(CronExpression.EVERY_6_HOURS)
@@ -26,6 +28,7 @@ export class XService {
     const tweets = await this.twitterRepository.findQuery({
       type: 'mention',
       intent: { $in: ['positive', 'neutral', 'question'] },
+      isExecuted: false,
     });
     const auth = (await this.authRepository.findAll())[0];
     let access_token = auth.access_token;
@@ -37,26 +40,45 @@ export class XService {
     tweets.sort((a, b) => Number(a.tweetId) - Number(b.tweetId));
     let isRetweetPosible = true;
     let isPostPosible = true;
+    const bulkOperations = [];
     for (const tweet of tweets) {
       let result;
       if (
         (tweet.intent === 'positive' || tweet.intent === 'neutral') &&
         isRetweetPosible
       ) {
-        result = await postRetweet('1897460652802761169', access_token);
+        result = await postRetweet(tweet.tweetId, access_token);
       } else if (tweet.intent === 'question' && isPostPosible) {
-        result = await postTweet('test', '1897460652802761169', access_token);
+        result = await postTweet(
+          'If you have any questions, please ask through https://t.me/rupee94_bot.',
+          tweet.tweetId,
+          access_token,
+        );
       }
 
-      if (result.status === 429) {
-        if (tweet.intent === 'positive' || tweet.intent === 'neutral') {
-          await this.executeMetaRepository.updateOne('retweet', tweet.tweetId);
+      if (result && result.status === 200) {
+        bulkOperations.push({
+          updateOne: {
+            filter: { tweetId: tweet.tweetId },
+            update: { isExecuted: true },
+          },
+        });
+      }
+
+      if (result && result.status === 429) {
+        if (
+          (tweet.intent === 'positive' || tweet.intent === 'neutral') &&
+          !isRetweetPosible
+        ) {
           isRetweetPosible = false;
-        } else if (tweet.intent === 'question') {
-          await this.executeMetaRepository.updateOne('post', tweet.tweetId);
+        } else if (tweet.intent === 'question' && !isPostPosible) {
           isPostPosible = false;
         }
       }
+    }
+
+    if (bulkOperations.length > 0) {
+      await this.twitterRepository.modifyTweetBulk(bulkOperations);
     }
 
     return true;
@@ -100,22 +122,53 @@ export class XService {
       access_token = newToken.access_token;
     }
 
-    const result = await getTweetsByQuery(
-      '(@cross_protocol OR #CROSS)(lang:en OR lang:ko) -is:reply -is:retweet is:verified',
+    const data = await getTweetsByQuery(
+      '@cross_protocol (lang:en OR lang:ko) -is:reply -is:retweet is:verified',
       access_token,
       latestTweet?.tweetId,
     );
 
-    if (result.status === 429) {
-      const latestTweet = result.tweets?.reduce(
-        (max, tweet) => (tweet.id > max.id ? tweet : max),
-        result.tweets[0],
+    if (data.tweets.length === 0) {
+      console.log('crawlTweetsByCrossMention이 종료되었습니다.');
+      return;
+    }
+    const results: TwitterModel[] = [];
+    for (const tweet of data.tweets) {
+      const intent = await IntentDetectWithConfidence(tweet.text, [
+        'positive',
+        'negative',
+        'question',
+        'neutral',
+      ]);
+
+      // Determine the highest confidence intent
+      const estimatedIntent = Object.keys(intent).reduce((a, b) =>
+        intent[a] > intent[b] ? a : b,
       );
 
-      await this.executeMetaRepository.updateOne('search', latestTweet.id);
+      results.push({
+        tweetId: tweet.id,
+        userName: tweet.author.userName,
+        text: tweet.text,
+        url: tweet.url,
+        type: 'mention',
+        tweetCreatedAt: new Date(tweet.createdAt),
+        recommendedText: '',
+        intent: estimatedIntent as
+          | 'positive'
+          | 'neutral'
+          | 'question'
+          | 'negative',
+        isExecuted: false,
+      });
     }
 
-    return result;
+    await this.twitterRepository.insertMany(results);
+
+    console.log('crawlTweetsByCrossMention이 종료되었습니다.');
+    console.log('results length', results.length);
+
+    return { tweets: results };
   }
 
   // @Cron(CronExpression.EVERY_6_HOURS)
@@ -175,6 +228,7 @@ export class XService {
           tweetCreatedAt: new Date(tweet.createdAt),
           recommendedText: retweetText,
           intent: 'neutral',
+          isExecuted: false,
         });
       }
     }

@@ -23,10 +23,8 @@ export async function postTweet(
       },
     );
 
-    console.log(response.data);
     return { status: 200, ...response.data };
   } catch (err) {
-    console.error('postTweet error', err.response.data);
     return err.response.data;
   }
 }
@@ -46,10 +44,8 @@ export async function postRetweet(tweetId: string, access_token: string) {
       },
     );
 
-    console.log(response.data);
     return { status: 200, ...response.data };
   } catch (err) {
-    console.error('postRetweet error', err.response.data);
     return err.response.data;
   }
 }
@@ -70,10 +66,8 @@ export async function refreshToken(refresh_token: string) {
       },
     );
 
-    console.log(response.data);
     return response.data;
   } catch (err) {
-    console.error('refreshToken error', err.response.data);
     throw err;
   }
 }

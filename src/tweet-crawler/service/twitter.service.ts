@@ -136,7 +136,7 @@ export class TwitterService {
   @Cron(CronExpression.EVERY_DAY_AT_MIDNIGHT)
   async crawlTweetsByCrossMention(): Promise<TweetResults> {
     const latestTweet = await this.twitterRepository.findLatest('mention');
-    let query = `($CROSS OR (@cross_protocol)) -filter:replies -filter:retweets filter:blue_verified (lang:en OR lang:ko)`;
+    let query = `@cross_protocol -filter:replies -filter:retweets filter:blue_verified (lang:en OR lang:ko)`;
     let since_id;
     if (latestTweet) {
       since_id = latestTweet.tweetId;
@@ -179,6 +179,7 @@ export class TwitterService {
           | 'neutral'
           | 'question'
           | 'negative',
+        isExecuted: false,
       });
     }
 
@@ -249,6 +250,7 @@ export class TwitterService {
           tweetCreatedAt: new Date(tweet.createdAt),
           recommendedText: retweetText,
           intent: 'neutral',
+          isExecuted: false,
         });
       }
     }

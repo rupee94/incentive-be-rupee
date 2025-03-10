@@ -9,11 +9,6 @@ import { AuthModel, AuthSchema } from './schema/auth.schema';
 import { AuthRepository } from './repository/auth.repository';
 import { XController } from './controller/x.controller';
 import { XService } from './service/x.service';
-import {
-  ExecuteMetaModel,
-  ExecuteMetaSchema,
-} from './schema/executeMeta.schema';
-import { ExecuteMetaRepository } from './repository/executeMeta.repository';
 
 @Module({
   imports: [
@@ -21,16 +16,9 @@ import { ExecuteMetaRepository } from './repository/executeMeta.repository';
     MongooseModule.forFeature([
       { name: TwitterModel.name, schema: TwitterSchema },
       { name: AuthModel.name, schema: AuthSchema },
-      { name: ExecuteMetaModel.name, schema: ExecuteMetaSchema },
     ]),
   ],
   controllers: [TwitterController, XController],
-  providers: [
-    TwitterService,
-    TwitterRepository,
-    AuthRepository,
-    XService,
-    ExecuteMetaRepository,
-  ],
+  providers: [TwitterService, TwitterRepository, AuthRepository, XService],
 })
 export class TweetCrawlerModule {}

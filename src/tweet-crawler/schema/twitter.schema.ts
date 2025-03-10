@@ -28,6 +28,9 @@ export class TwitterModel {
   @Prop({ type: String })
   recommendedText: string;
 
+  @Prop({ type: Boolean, default: false })
+  isExecuted: boolean;
+
   @Prop({ type: String })
   type: 'influencer' | 'mention';
 
