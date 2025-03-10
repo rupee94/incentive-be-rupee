@@ -15,6 +15,7 @@ import {
   IntentDetectWithConfidence,
   RetweetText,
 } from 'src/utils/openai';
+import { Cron, CronExpression } from '@nestjs/schedule';
 
 @Injectable()
 export class XService {
@@ -23,7 +24,7 @@ export class XService {
     private readonly authRepository: AuthRepository,
   ) {}
 
-  // @Cron(CronExpression.EVERY_6_HOURS)
+  @Cron(CronExpression.EVERY_10_MINUTES)
   async executeAutoMention() {
     const tweets = await this.twitterRepository.findQuery({
       type: 'mention',
@@ -35,6 +36,11 @@ export class XService {
     const newToken = await this._checkTokenExpiredAndUpdate(auth);
     if (newToken) {
       access_token = newToken.access_token;
+    }
+
+    if (tweets.length === 0) {
+      console.log('executeAutoMention이 종료되었습니다.');
+      return;
     }
 
     tweets.sort((a, b) => Number(a.tweetId) - Number(b.tweetId));

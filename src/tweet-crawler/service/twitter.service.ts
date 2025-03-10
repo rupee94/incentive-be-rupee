@@ -133,10 +133,10 @@ export class TwitterService {
     return await getTweetsByQuery(query, 'mention');
   }
 
-  @Cron(CronExpression.EVERY_DAY_AT_MIDNIGHT)
+  @Cron(CronExpression.EVERY_10_MINUTES)
   async crawlTweetsByCrossMention(): Promise<TweetResults> {
     const latestTweet = await this.twitterRepository.findLatest('mention');
-    let query = `@cross_protocol -filter:replies -filter:retweets filter:blue_verified (lang:en OR lang:ko)`;
+    let query = `(@cross_protocol OR $CROSS) -filter:replies (lang:en OR lang:ko)`;
     let since_id;
     if (latestTweet) {
       since_id = latestTweet.tweetId;
